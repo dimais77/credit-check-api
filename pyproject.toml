@@ -38,7 +38,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["core", "main"]
+known-first-party = ["api", "core", "main"]
 
 [tool.mypy]
 python_version = "3.11"
