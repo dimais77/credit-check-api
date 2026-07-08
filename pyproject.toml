@@ -5,8 +5,11 @@ requires-python = "==3.11.*"
 version = "0.1.0"
 authors = [{ name = "Dmitrii Isaev", email = "dimais@mail.ru" }]
 dependencies = [
+    "alembic>=1.18.5",
+    "asyncpg>=0.31.0",
     "fastapi[standard]>=0.139.0",
     "pydantic-settings>=2.14.2",
+    "sqlalchemy[asyncio]>=2.0.51",
 ]
 
 [tool.uv]
@@ -14,9 +17,9 @@ package = false
 
 [dependency-groups]
 dev = [
-  "mypy>=2.2.0",
-  "pytest>=9.1.1",
-  "ruff>=0.15.20",
+    "mypy>=2.2.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.20",
 ]
 
 [tool.ruff]
@@ -27,22 +30,24 @@ extend-exclude = [".venv"]
 
 [tool.ruff.lint]
 select = [
-  "E",
-  "F",
-  "I",
-  "N",
-  "UP",
-  "B",
-  "SIM",
-  "RUF",
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
 ]
 
 ignore = [
-  "RUF001",
+    "RUF001",
+    "RUF002",
+    "RUF003",
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "core", "main"]
+known-first-party = ["api", "core", "main", "services"]
 
 [tool.mypy]
 python_version = "3.11"
