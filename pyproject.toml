@@ -4,7 +4,9 @@ description = "API service for preliminary validation of subsidized-loan documen
 requires-python = "==3.11.*"
 version = "0.1.0"
 authors = [{ name = "Dmitrii Isaev", email = "dimais@mail.ru" }]
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.139.0",
+]
 
 [tool.uv]
 package = false
@@ -35,7 +37,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = []
+known-first-party = ["main"]
 
 [tool.mypy]
 python_version = "3.11"
