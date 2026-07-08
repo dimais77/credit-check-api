@@ -6,6 +6,7 @@ version = "0.1.0"
 authors = [{ name = "Dmitrii Isaev", email = "dimais@mail.ru" }]
 dependencies = [
     "fastapi[standard]>=0.139.0",
+    "pydantic-settings>=2.14.2",
 ]
 
 [tool.uv]
@@ -37,7 +38,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["main"]
+known-first-party = ["core", "main"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -46,7 +47,7 @@ mypy_path = "src"
 explicit_package_bases = true
 files = ["src", "tests"]
 exclude = []
-plugins = []
+plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
