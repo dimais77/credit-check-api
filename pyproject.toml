@@ -37,6 +37,10 @@ select = [
   "RUF",
 ]
 
+ignore = [
+  "RUF001",
+]
+
 [tool.ruff.lint.isort]
 known-first-party = ["api", "core", "main"]
 
