@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from api.routes import health
+from api.routes import checks, health
 from core import database
 from core.config import get_settings
 from core.exceptions import register_exception_handlers
@@ -26,3 +26,4 @@ app = FastAPI(
 
 register_exception_handlers(app)
 app.include_router(health.router)
+app.include_router(checks.router)
