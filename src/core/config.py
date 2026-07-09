@@ -17,6 +17,7 @@ class StorageConfig(BaseModel):
 
 class DatabaseConfig(BaseModel):
     url: PostgresDsn
+    test_url: PostgresDsn | None = None
     echo: bool = False
     pool_size: Annotated[int, Field(ge=0)] = 5
     max_overflow: Annotated[int, Field(ge=-1)] = 10
