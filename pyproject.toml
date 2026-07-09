@@ -6,6 +6,7 @@ version = "0.1.0"
 authors = [{ name = "Dmitrii Isaev", email = "dimais@mail.ru" }]
 dependencies = [
     "alembic>=1.18.5",
+    "anyio>=4.14.1",
     "asyncpg>=0.31.0",
     "fastapi[standard]>=0.139.0",
     "pydantic-settings>=2.14.2",
@@ -47,7 +48,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "core", "main", "models", "repositories", "services"]
+known-first-party = ["api", "core", "main", "models", "repositories", "services", "storage"]
 
 [tool.mypy]
 python_version = "3.11"
