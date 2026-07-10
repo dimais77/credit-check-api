@@ -3,6 +3,11 @@ from pathlib import Path
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.enums import Program
+from repositories import check as check_repo
+from services import check_service
 
 pytestmark = pytest.mark.anyio
 
@@ -10,7 +15,7 @@ FileSpec = tuple[str, tuple[str, bytes, str]]
 
 
 def _file(name: str) -> FileSpec:
-    return ("files", (name, b"document contents", "application/pdf"))
+    return "files", (name, b"document contents", "application/pdf")
 
 
 FEDERAL_COMPLETE = [
@@ -80,6 +85,27 @@ async def test_create_persists_files(client: AsyncClient, tmp_path: Path) -> Non
     assert len(stored) == 4
 
 
+async def test_files_cleaned_up_on_db_failure(
+    session: AsyncSession, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def failing_create(_session: object, _dto: object) -> None:
+        raise RuntimeError("db unavailable")
+
+    monkeypatch.setattr(check_repo, "create", failing_create)
+
+    uploads = [
+        check_service.UploadedFile(filename=name, content_type="application/pdf", data=b"x")
+        for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
+    ]
+
+    with pytest.raises(RuntimeError):
+        await check_service.run_check(
+            session, Program.FEDERAL, uploads, base_dir=tmp_path, max_size_mb=20
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
 async def test_get_check(client: AsyncClient) -> None:
     created = await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
     check_id = created.json()["check_id"]
@@ -90,7 +116,6 @@ async def test_get_check(client: AsyncClient) -> None:
 
 
 async def test_documents_sorted_in_canonical_order(client: AsyncClient) -> None:
-    # Uploaded out of order; response must follow contract → spec → invoice → act.
     files = [_file("Акт.pdf"), _file("Счёт.pdf"), _file("Договор.pdf"), _file("Спецификация.pdf")]
     expected = ["Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf"]
 

@@ -1,7 +1,9 @@
+import shutil
 import uuid
 from pathlib import Path
 
 import anyio
+from anyio import to_thread
 
 
 async def save(
@@ -16,3 +18,12 @@ async def save(
     await path.parent.mkdir(parents=True, exist_ok=True)
     await path.write_bytes(data)
     return key
+
+
+def _rmtree(path: Path) -> None:
+    shutil.rmtree(path, ignore_errors=True)
+
+
+async def delete(base_dir: Path, check_id: uuid.UUID) -> None:
+    path = Path(base_dir) / str(check_id)
+    await to_thread.run_sync(_rmtree, path)
