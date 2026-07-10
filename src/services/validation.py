@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from core.enums import DocumentType, IssueLevel, Program
+from services.document_types import DOCUMENT_META
 from services.issue import Issue
 
 ALLOWED_EXTENSIONS = frozenset({".pdf", ".docx", ".jpg", ".png"})
@@ -17,13 +18,6 @@ _REQUIRED_TYPES: dict[Program, tuple[DocumentType, ...]] = {
         DocumentType.INVOICE,
         DocumentType.ACT,
     ),
-}
-
-_TYPE_LABELS: dict[DocumentType, str] = {
-    DocumentType.CONTRACT: "договор",
-    DocumentType.SPECIFICATION: "спецификация",
-    DocumentType.INVOICE: "счёт",
-    DocumentType.ACT: "акт",
 }
 
 
@@ -50,7 +44,10 @@ def validate_file(
 
 def check_completeness(detected: set[DocumentType], program: Program) -> list[Issue]:
     return [
-        Issue(IssueLevel.ERROR, f"Отсутствует обязательный документ: {_TYPE_LABELS[document_type]}")
+        Issue(
+            IssueLevel.ERROR,
+            f"Отсутствует обязательный документ: {DOCUMENT_META[document_type].label}",
+        )
         for document_type in _REQUIRED_TYPES[program]
         if document_type not in detected
     ]

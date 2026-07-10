@@ -1,12 +1,5 @@
 from core.enums import DocumentType
-
-_PATTERNS: tuple[tuple[str, DocumentType], ...] = (
-    ("договор", DocumentType.CONTRACT),
-    ("спецификац", DocumentType.SPECIFICATION),
-    ("счет", DocumentType.INVOICE),
-    ("акт", DocumentType.ACT),
-    ("упд", DocumentType.ACT),
-)
+from services.document_types import DOCUMENT_META
 
 
 def _normalize(filename: str) -> str:
@@ -15,7 +8,7 @@ def _normalize(filename: str) -> str:
 
 def classify_document(filename: str) -> DocumentType | None:
     normalized = _normalize(filename)
-    for pattern, document_type in _PATTERNS:
-        if pattern in normalized:
+    for document_type in DocumentType:
+        if any(pattern in normalized for pattern in DOCUMENT_META[document_type].patterns):
             return document_type
     return None

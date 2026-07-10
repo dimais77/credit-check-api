@@ -2,6 +2,11 @@ import pytest
 
 from core.enums import DocumentType
 from services.document_classifier import classify_document
+from services.document_types import DOCUMENT_META
+
+
+def test_document_meta_covers_all_types() -> None:
+    assert set(DOCUMENT_META) == set(DocumentType)
 
 
 @pytest.mark.parametrize(
