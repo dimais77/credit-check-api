@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from core.enums import DocumentType, IssueLevel, Program
-from services.document_classifier import classify_document
 from services.issue import Issue
 
 ALLOWED_EXTENSIONS = frozenset({".pdf", ".docx", ".jpg", ".png"})
@@ -28,7 +27,9 @@ _TYPE_LABELS: dict[DocumentType, str] = {
 }
 
 
-def validate_file(filename: str, size_bytes: int, max_size_mb: int) -> list[Issue]:
+def validate_file(
+    filename: str, size_bytes: int, max_size_mb: int, detected: DocumentType | None
+) -> list[Issue]:
     issues: list[Issue] = []
 
     if Path(filename).suffix.lower() not in ALLOWED_EXTENSIONS:
@@ -39,7 +40,7 @@ def validate_file(filename: str, size_bytes: int, max_size_mb: int) -> list[Issu
             Issue(IssueLevel.WARNING, f"Размер файла превышает {max_size_mb} МБ: «{filename}»")
         )
 
-    if classify_document(filename) is None:
+    if detected is None:
         issues.append(
             Issue(IssueLevel.WARNING, f"Не удалось определить тип документа: «{filename}»")
         )

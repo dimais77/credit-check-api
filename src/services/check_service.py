@@ -43,7 +43,7 @@ async def run_check(
     for upload in uploads:
         size_bytes = len(upload.data)
         detected = classify_document(upload.filename)
-        issues.extend(validate_file(upload.filename, size_bytes, max_size_mb))
+        issues.extend(validate_file(upload.filename, size_bytes, max_size_mb, detected))
         if detected is not None:
             detected_types.add(detected)
 

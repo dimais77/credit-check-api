@@ -5,24 +5,24 @@ MAX_SIZE_MB = 20
 
 
 def test_valid_file_no_issues() -> None:
-    assert validate_file("договор.pdf", 1024, MAX_SIZE_MB) == []
+    assert validate_file("договор.pdf", 1024, MAX_SIZE_MB, DocumentType.CONTRACT) == []
 
 
 def test_unrecognized_name_warning() -> None:
-    issues = validate_file("scan_0041.jpg", 1024, MAX_SIZE_MB)
+    issues = validate_file("scan_0041.jpg", 1024, MAX_SIZE_MB, None)
 
     assert [issue.level for issue in issues] == [IssueLevel.WARNING]
     assert issues[0].message == "Не удалось определить тип документа: «scan_0041.jpg»"
 
 
 def test_invalid_format_warning() -> None:
-    issues = validate_file("договор.txt", 1024, MAX_SIZE_MB)
+    issues = validate_file("договор.txt", 1024, MAX_SIZE_MB, DocumentType.CONTRACT)
 
     assert [issue.level for issue in issues] == [IssueLevel.WARNING]
 
 
 def test_oversized_file_warning() -> None:
-    issues = validate_file("договор.pdf", 21 * 1024 * 1024, MAX_SIZE_MB)
+    issues = validate_file("договор.pdf", 21 * 1024 * 1024, MAX_SIZE_MB, DocumentType.CONTRACT)
 
     assert [issue.level for issue in issues] == [IssueLevel.WARNING]
 
