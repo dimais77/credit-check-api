@@ -21,6 +21,8 @@ class DatabaseConfig(BaseModel):
     echo: bool = False
     pool_size: Annotated[int, Field(ge=0)] = 5
     max_overflow: Annotated[int, Field(ge=-1)] = 10
+    statement_timeout_ms: Annotated[int, Field(ge=0)] = 5000
+    lock_timeout_ms: Annotated[int, Field(ge=0)] = 3000
 
 
 class Settings(BaseSettings):
