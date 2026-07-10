@@ -43,6 +43,56 @@ class CheckPage:
     offset: int
 
 
+async def _prepare_check(
+    check_id: uuid.UUID,
+    program: Program,
+    uploads: list[UploadedFile],
+    *,
+    base_dir: Path,
+    max_size_mb: int,
+) -> NewCheck:
+    issues: list[Issue] = []
+    documents: list[NewDocument] = []
+    detected_types: set[DocumentType] = set()
+
+    for upload in uploads:
+        size_bytes = len(upload.data)
+        detected = classify_document(upload.filename)
+        issues.extend(validate_file(upload.filename, size_bytes, max_size_mb, detected))
+        if detected is not None:
+            detected_types.add(detected)
+
+        document_id = uuid.uuid4()
+        ext = Path(upload.filename).suffix
+        storage_path = await files.save(base_dir, check_id, document_id, ext, upload.data)
+        documents.append(
+            NewDocument(
+                id=document_id,
+                name=upload.filename,
+                detected_type=detected,
+                size_bytes=size_bytes,
+                content_type=upload.content_type,
+                storage_path=storage_path,
+            )
+        )
+
+    documents.sort(key=_order_key)
+
+    issues.extend(check_completeness(detected_types, program))
+    status = resolve_status(issues)
+    reason = build_reason(issues, status)
+
+    return NewCheck(
+        id=check_id,
+        program=program,
+        status=status,
+        reason=reason,
+        checked_at=datetime.datetime.now(datetime.UTC),
+        documents=documents,
+        issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],
+    )
+
+
 async def run_check(
     session: AsyncSession,
     program: Program,
@@ -52,50 +102,12 @@ async def run_check(
     max_size_mb: int,
 ) -> Check:
     check_id = uuid.uuid4()
-    issues: list[Issue] = []
-    documents: list[NewDocument] = []
-    detected_types: set[DocumentType] = set()
-
     try:
-        for upload in uploads:
-            size_bytes = len(upload.data)
-            detected = classify_document(upload.filename)
-            issues.extend(validate_file(upload.filename, size_bytes, max_size_mb, detected))
-            if detected is not None:
-                detected_types.add(detected)
-
-            document_id = uuid.uuid4()
-            ext = Path(upload.filename).suffix
-            storage_path = await files.save(base_dir, check_id, document_id, ext, upload.data)
-            documents.append(
-                NewDocument(
-                    id=document_id,
-                    name=upload.filename,
-                    detected_type=detected,
-                    size_bytes=size_bytes,
-                    content_type=upload.content_type,
-                    storage_path=storage_path,
-                )
-            )
-
-        documents.sort(key=_order_key)
-
-        issues.extend(check_completeness(detected_types, program))
-        status = resolve_status(issues)
-        reason = build_reason(issues, status)
-
-        new_check = NewCheck(
-            id=check_id,
-            program=program,
-            status=status,
-            reason=reason,
-            checked_at=datetime.datetime.now(datetime.UTC),
-            documents=documents,
-            issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],
+        new_check = await _prepare_check(
+            check_id, program, uploads, base_dir=base_dir, max_size_mb=max_size_mb
         )
-
-        created = await check_repo.create(session, new_check)
-        await session.commit()
+        async with session.begin():
+            return await check_repo.create(session, new_check)
     except Exception:
         logger.exception(
             "Check %s failed; removing stored files under %s",
@@ -104,8 +116,6 @@ async def run_check(
         )
         await files.delete(base_dir, check_id)
         raise
-
-    return created
 
 
 async def get_check(session: AsyncSession, check_id: uuid.UUID) -> Check:
