@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import Settings, get_settings
@@ -23,6 +23,7 @@ async def create_check(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: Annotated[Settings, Depends(get_settings)],
     program: Annotated[Program, Form()],
+    idempotency_key: Annotated[str | None, Header()] = None,
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> CheckResult:
     if not files:
@@ -40,6 +41,7 @@ async def create_check(
         session,
         program,
         uploads,
+        idempotency_key,
         base_dir=settings.storage.dir,
         max_size_mb=settings.storage.max_file_size_mb,
     )

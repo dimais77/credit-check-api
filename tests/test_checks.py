@@ -1,3 +1,4 @@
+import datetime
 import uuid
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.enums import Program
+from models import IdempotencyKey
 from repositories import check as check_repo
 from services import check_service
 
@@ -16,6 +18,10 @@ FileSpec = tuple[str, tuple[str, bytes, str]]
 
 def _file(name: str) -> FileSpec:
     return "files", (name, b"document contents", "application/pdf")
+
+
+def _idempotency_headers() -> dict[str, str]:
+    return {"Idempotency-Key": str(uuid.uuid4())}
 
 
 FEDERAL_COMPLETE = [
@@ -85,6 +91,14 @@ async def test_create_persists_files(client: AsyncClient, tmp_path: Path) -> Non
     assert len(stored) == 4
 
 
+async def test_create_without_idempotency_key_creates_separate_checks(client: AsyncClient) -> None:
+    first = await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+    second = await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+
+    assert first.status_code == second.status_code == 201
+    assert first.json()["check_id"] != second.json()["check_id"]
+
+
 async def test_files_cleaned_up_on_db_failure(
     session: AsyncSession, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -100,7 +114,7 @@ async def test_files_cleaned_up_on_db_failure(
 
     with pytest.raises(RuntimeError):
         await check_service.run_check(
-            session, Program.FEDERAL, uploads, base_dir=tmp_path, max_size_mb=20
+            session, Program.FEDERAL, uploads, None, base_dir=tmp_path, max_size_mb=20
         )
 
     assert list(tmp_path.iterdir()) == []
@@ -163,3 +177,85 @@ async def test_list_checks(client: AsyncClient) -> None:
 async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> None:
     response = await client.get("/api/checks", params={"limit": 0})
     assert response.status_code == 422
+
+
+def _federal_uploads() -> list[check_service.UploadedFile]:
+    return [
+        check_service.UploadedFile(
+            filename=name, content_type="application/pdf", data=b"document contents"
+        )
+        for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
+    ]
+
+
+async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> None:
+    headers = _idempotency_headers()
+
+    first = await client.post(
+        "/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE, headers=headers
+    )
+    second = await client.post(
+        "/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE, headers=headers
+    )
+
+    assert first.status_code == second.status_code == 201
+    assert first.json()["check_id"] == second.json()["check_id"]
+
+    listed = await client.get("/api/checks")
+    assert listed.json()["total"] == 1
+
+
+async def test_create_conflicts_on_key_reused_with_different_payload(client: AsyncClient) -> None:
+    headers = _idempotency_headers()
+
+    first = await client.post(
+        "/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE, headers=headers
+    )
+    second = await client.post(
+        "/api/checks",
+        data={"program": "regional"},
+        files=[_file("Договор.pdf"), _file("Счёт.pdf"), _file("Акт.pdf")],
+        headers=headers,
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 422
+
+
+async def test_create_returns_409_while_key_still_in_progress(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    key = str(uuid.uuid4())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    session.add(IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None))
+    await session.commit()
+
+    response = await client.post(
+        "/api/checks",
+        data={"program": "federal"},
+        files=FEDERAL_COMPLETE,
+        headers={"Idempotency-Key": key},
+    )
+
+    assert response.status_code == 409
+
+
+async def test_create_reclaims_stale_in_progress_key(
+    client: AsyncClient, session: AsyncSession
+) -> None:
+    key = str(uuid.uuid4())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    stale_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+    session.add(
+        IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None, created_at=stale_at)
+    )
+    await session.commit()
+
+    response = await client.post(
+        "/api/checks",
+        data={"program": "federal"},
+        files=FEDERAL_COMPLETE,
+        headers={"Idempotency-Key": key},
+    )
+
+    assert response.status_code == 201

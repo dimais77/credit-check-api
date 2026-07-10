@@ -16,6 +16,16 @@ class CheckNotFoundError(AppError):
     detail = "Check not found"
 
 
+class IdempotencyKeyConflictError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    detail = "Idempotency-Key was already used with a different request"
+
+
+class IdempotencyKeyInProgressError(AppError):
+    status_code = status.HTTP_409_CONFLICT
+    detail = "A request with this Idempotency-Key is already being processed"
+
+
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
