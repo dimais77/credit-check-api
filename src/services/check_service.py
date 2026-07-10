@@ -8,9 +8,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.enums import DocumentType, Program
+from core.exceptions import CheckNotFoundError
 from models import Check
 from repositories import check as check_repo
-from repositories.dto import NewCheck, NewDocument, NewIssue
+from repositories.dto import CheckSummary, NewCheck, NewDocument, NewIssue
 from services.document_classifier import classify_document
 from services.issue import Issue
 from services.status import build_reason, resolve_status
@@ -35,6 +36,14 @@ class UploadedFile:
     filename: str
     content_type: str | None
     data: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class CheckPage:
+    items: list[CheckSummary]
+    total: int
+    limit: int
+    offset: int
 
 
 async def run_check(
@@ -100,3 +109,16 @@ async def run_check(
         raise
 
     return created
+
+
+async def get_check(session: AsyncSession, check_id: uuid.UUID) -> Check:
+    check = await check_repo.get_by_id(session, check_id)
+    if check is None:
+        raise CheckNotFoundError
+    return check
+
+
+async def list_checks(session: AsyncSession, limit: int, offset: int) -> CheckPage:
+    items = await check_repo.list_all(session, limit, offset)
+    total = await check_repo.count(session)
+    return CheckPage(items=items, total=total, limit=limit, offset=offset)

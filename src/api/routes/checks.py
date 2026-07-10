@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import Settings, get_settings
 from core.database import get_session
 from core.enums import Program
-from core.exceptions import CheckNotFoundError
-from repositories import check as check_repo
 from schemas.check import CheckListItem, CheckResult
 from schemas.pagination import Page
 from services import check_service
@@ -54,10 +52,9 @@ async def list_checks(
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[CheckListItem]:
-    rows = await check_repo.list_all(session, limit, offset)
-    total = await check_repo.count(session)
-    items = [CheckListItem.model_validate(row) for row in rows]
-    return Page[CheckListItem](items=items, total=total, limit=limit, offset=offset)
+    page = await check_service.list_checks(session, limit, offset)
+    items = [CheckListItem.model_validate(item) for item in page.items]
+    return Page[CheckListItem](items=items, total=page.total, limit=page.limit, offset=page.offset)
 
 
 @router.get(
@@ -69,7 +66,5 @@ async def get_check(
     session: Annotated[AsyncSession, Depends(get_session)],
     check_id: uuid.UUID,
 ) -> CheckResult:
-    check = await check_repo.get_by_id(session, check_id)
-    if check is None:
-        raise CheckNotFoundError
+    check = await check_service.get_check(session, check_id)
     return CheckResult.model_validate(check)

@@ -1,13 +1,11 @@
-import datetime
 import uuid
 
-from sqlalchemy import Row, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from core.enums import CheckStatus, Program
 from models import Check, Document, Issue
-from repositories.dto import NewCheck
+from repositories.dto import CheckSummary, NewCheck
 
 
 async def create(session: AsyncSession, dto: NewCheck) -> Check:
@@ -44,9 +42,7 @@ async def get_by_id(session: AsyncSession, check_id: uuid.UUID) -> Check | None:
     return result.scalar_one_or_none()
 
 
-async def list_all(
-    session: AsyncSession, limit: int, offset: int
-) -> list[Row[tuple[uuid.UUID, datetime.datetime, Program, CheckStatus, int]]]:
+async def list_all(session: AsyncSession, limit: int, offset: int) -> list[CheckSummary]:
     result = await session.execute(
         select(
             Check.id,
@@ -61,7 +57,16 @@ async def list_all(
         .limit(limit)
         .offset(offset)
     )
-    return list(result.all())
+    return [
+        CheckSummary(
+            id=row.id,
+            checked_at=row.checked_at,
+            program=row.program,
+            status=row.status,
+            documents_count=row.documents_count,
+        )
+        for row in result.all()
+    ]
 
 
 async def count(session: AsyncSession) -> int:

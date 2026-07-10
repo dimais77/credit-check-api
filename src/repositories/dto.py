@@ -30,3 +30,12 @@ class NewCheck:
     checked_at: datetime.datetime
     documents: list[NewDocument]
     issues: list[NewIssue]
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class CheckSummary:
+    id: uuid.UUID
+    checked_at: datetime.datetime
+    program: Program
+    status: CheckStatus
+    documents_count: int

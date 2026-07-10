@@ -61,7 +61,7 @@ src/
 │   ├── validation.py            # формат/размер/имя + комплектность
 │   ├── status.py                # итоговый статус и причина
 │   └── check_service.py         # run_check: весь сценарий проверки
-├── repositories/     # доступ к БД + входные DTO
+├── repositories/     # доступ к БД + DTO
 ├── models/           # ORM: Check, Document, Issue
 ├── storage/          # запись файлов в хранилище
 ├── core/             # config, database, logging, exceptions
