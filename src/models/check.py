@@ -2,6 +2,7 @@ import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Text, func
+from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.enums import CheckStatus, Program
@@ -25,8 +26,16 @@ class Check(UuidPkMixin, Base):
     )
 
     documents: Mapped[list["Document"]] = relationship(
-        back_populates="check", cascade="all, delete-orphan", passive_deletes=True
+        back_populates="check",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Document.position",
+        collection_class=ordering_list("position"),
     )
     issues: Mapped[list["Issue"]] = relationship(
-        back_populates="check", cascade="all, delete-orphan", passive_deletes=True
+        back_populates="check",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="Issue.position",
+        collection_class=ordering_list("position"),
     )

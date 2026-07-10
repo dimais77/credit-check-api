@@ -16,6 +16,9 @@ from services.check_service import UploadedFile
 
 router = APIRouter(prefix="/api/checks", tags=["checks"])
 
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+
 
 @router.post("", response_model=CheckResult, status_code=status.HTTP_201_CREATED)
 async def create_check(
@@ -48,7 +51,7 @@ async def create_check(
 @router.get("", response_model=Page[CheckListItem])
 async def list_checks(
     session: Annotated[AsyncSession, Depends(get_session)],
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[CheckListItem]:
     rows = await check_repo.list_all(session, limit, offset)

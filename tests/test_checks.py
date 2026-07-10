@@ -89,6 +89,27 @@ async def test_get_check(client: AsyncClient) -> None:
     assert response.json()["check_id"] == check_id
 
 
+async def test_documents_sorted_in_canonical_order(client: AsyncClient) -> None:
+    # Uploaded out of order; response must follow contract → spec → invoice → act.
+    files = [_file("Акт.pdf"), _file("Счёт.pdf"), _file("Договор.pdf"), _file("Спецификация.pdf")]
+    expected = ["Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf"]
+
+    created = await client.post("/api/checks", data={"program": "federal"}, files=files)
+    check_id = created.json()["check_id"]
+    assert [doc["name"] for doc in created.json()["documents"]] == expected
+
+    fetched = await client.get(f"/api/checks/{check_id}")
+    assert [doc["name"] for doc in fetched.json()["documents"]] == expected
+
+
+async def test_unrecognized_document_sorted_last(client: AsyncClient) -> None:
+    files = [_file("scan_0041.jpg"), _file("Договор.pdf"), _file("Счёт.pdf"), _file("Акт.pdf")]
+    expected = ["Договор.pdf", "Счёт.pdf", "Акт.pdf", "scan_0041.jpg"]
+
+    created = await client.post("/api/checks", data={"program": "regional"}, files=files)
+    assert [doc["name"] for doc in created.json()["documents"]] == expected
+
+
 async def test_get_check_not_found(client: AsyncClient) -> None:
     response = await client.get(f"/api/checks/{uuid.uuid4()}")
     assert response.status_code == 404

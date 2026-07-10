@@ -19,6 +19,16 @@ from storage import files
 
 logger = logging.getLogger(__name__)
 
+# Canonical document-flow order (contract → specification → invoice → act);
+# unrecognized documents go last.
+_TYPE_ORDER = {document_type: index for index, document_type in enumerate(DocumentType)}
+
+
+def _order_key(document: NewDocument) -> int:
+    if document.detected_type is None:
+        return len(_TYPE_ORDER)
+    return _TYPE_ORDER[document.detected_type]
+
 
 @dataclass(frozen=True, slots=True)
 class UploadedFile:
@@ -60,6 +70,8 @@ async def run_check(
                 storage_path=storage_path,
             )
         )
+
+    documents.sort(key=_order_key)
 
     issues.extend(check_completeness(detected_types, program))
     status = resolve_status(issues)

@@ -18,5 +18,6 @@ class Issue(UuidPkMixin, Base):
     check_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("checks.id", ondelete="CASCADE"))
     level: Mapped[IssueLevel] = mapped_column(pg_enum(IssueLevel, "issue_level"))
     message: Mapped[str] = mapped_column(Text)
+    position: Mapped[int]
 
     check: Mapped["Check"] = relationship(back_populates="issues")
