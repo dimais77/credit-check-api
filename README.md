@@ -10,6 +10,7 @@
 
 ```bash
 cp .env.example .env
+cp src/.env.example src/.env
 docker compose up --build
 ```
 
