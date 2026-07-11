@@ -1,0 +1,66 @@
+[project]
+name = "credit-check-api"
+description = "API service for preliminary validation of subsidized-loan document packages"
+requires-python = "==3.11.*"
+version = "0.1.0"
+authors = [{ name = "Dmitrii Isaev", email = "dimais@mail.ru" }]
+dependencies = [
+    "alembic>=1.18.5",
+    "anyio>=4.14.1",
+    "asyncpg>=0.31.0",
+    "fastapi[standard]>=0.139.0",
+    "pydantic-settings>=2.14.2",
+    "sqlalchemy[asyncio]>=2.0.51",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.2.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.20",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [".venv", "src/migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "N",
+    "UP",
+    "B",
+    "SIM",
+    "RUF",
+]
+
+ignore = [
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "core", "main", "models", "repositories", "services", "storage"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+mypy_path = "src"
+explicit_package_bases = true
+files = ["src", "tests"]
+exclude = ["src/migrations/versions"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+pythonpath = ["src"]
+testpaths = ["tests"]
