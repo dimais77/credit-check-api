@@ -82,6 +82,20 @@ async def test_create_check_in_progress_on_warning(client: AsyncClient) -> None:
     assert all(issue["level"] == "warning" for issue in body["issues"])
 
 
+async def test_create_check_in_progress_on_duplicate_type(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/checks",
+        data={"program": "regional"},
+        files=[_file("Договор.pdf"), _file("Договор-2.pdf"), _file("Счёт.pdf"), _file("Акт.pdf")],
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "check_in_progress"
+    assert any(
+        "Несколько документов типа «договор»" in issue["message"] for issue in body["issues"]
+    )
+
+
 async def test_create_no_files_returns_400(client: AsyncClient) -> None:
     response = await client.post("/api/checks", data={"program": "federal"})
     assert response.status_code == 400

@@ -1,6 +1,7 @@
 import datetime
 import logging
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from services.document_classifier import classify_document
 from services.issue import Issue
 from services.status import build_reason, resolve_status
 from services.upload import UploadedFile
-from services.validation import check_completeness, validate_file
+from services.validation import check_completeness, check_duplicates, validate_file
 from storage import files
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ async def _prepare_check(
 ) -> tuple[NewCheck, str]:
     issues: list[Issue] = []
     documents: list[NewDocument] = []
-    detected_types: set[DocumentType] = set()
+    detected_counts: Counter[DocumentType] = Counter()
     file_digests: list[tuple[str, str]] = []
     max_bytes = max_size_mb * 1024 * 1024
 
@@ -68,7 +69,7 @@ async def _prepare_check(
         file_digests.append((upload.filename, stored.digest))
         issues.extend(validate_file(upload.filename, stored.size_bytes, max_size_mb, detected))
         if detected is not None:
-            detected_types.add(detected)
+            detected_counts[detected] += 1
 
         documents.append(
             NewDocument(
@@ -83,7 +84,8 @@ async def _prepare_check(
 
     documents.sort(key=_order_key)
 
-    issues.extend(check_completeness(detected_types, program))
+    issues.extend(check_completeness(set(detected_counts), program))
+    issues.extend(check_duplicates(detected_counts, program))
     status = resolve_status(issues)
     reason = build_reason(issues, status)
 

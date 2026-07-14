@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from pathlib import Path
 
 from core.enums import DocumentType, IssueLevel, Program
@@ -50,4 +51,15 @@ def check_completeness(detected: set[DocumentType], program: Program) -> list[Is
         )
         for document_type in _REQUIRED_TYPES[program]
         if document_type not in detected
+    ]
+
+
+def check_duplicates(counts: Mapping[DocumentType, int], program: Program) -> list[Issue]:
+    return [
+        Issue(
+            IssueLevel.WARNING,
+            f"Несколько документов типа «{DOCUMENT_META[document_type].label}» в пакете",
+        )
+        for document_type in _REQUIRED_TYPES[program]
+        if counts.get(document_type, 0) > 1
     ]
