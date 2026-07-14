@@ -67,7 +67,7 @@ class CheckResult(BaseModel):
 class CheckListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: uuid.UUID
+    check_id: uuid.UUID = Field(validation_alias="id")
     package_id: uuid.UUID
     checked_at: UtcDateTime
     program: Program
