@@ -11,7 +11,7 @@ LogLevel = Literal["debug", "info", "warning", "error", "critical"]
 
 
 class StorageConfig(BaseModel):
-    dir: Path = BASE_DIR.parent / "storage"
+    dir: Path = BASE_DIR / "storage"
     max_file_size_mb: int = 20
 
 

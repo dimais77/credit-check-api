@@ -49,7 +49,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "core", "main", "models", "repositories", "services", "storage"]
+known-first-party = ["api", "core", "main", "models", "repositories", "schemas", "services", "storage"]
 
 [tool.mypy]
 python_version = "3.11"
