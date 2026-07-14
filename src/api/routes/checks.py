@@ -10,7 +10,7 @@ from core.enums import Program
 from schemas.check import CheckListItem, CheckResult
 from schemas.pagination import CursorPage
 from services import check_service
-from services.check_service import UploadedFile
+from services.upload import UploadedFile
 
 router = APIRouter(prefix="/api/checks", tags=["checks"])
 
