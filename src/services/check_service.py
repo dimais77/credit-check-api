@@ -3,9 +3,8 @@ import binascii
 import datetime
 import logging
 import uuid
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
 
@@ -22,6 +21,7 @@ from models import Check
 from repositories import check as check_repo
 from repositories import idempotency as idempotency_repo
 from repositories.dto import CheckSummary, NewCheck, NewDocument, NewIssue
+from services import fingerprint
 from services.document_classifier import classify_document
 from services.issue import Issue
 from services.status import build_reason, resolve_status
@@ -65,15 +65,6 @@ class CheckPage:
     has_more: bool
 
 
-def _fingerprint(program: Program, digests: Iterable[str]) -> str:
-    payload = "|".join([program.value, *sorted(digests)])
-    return sha256(payload.encode()).hexdigest()
-
-
-def _compute_fingerprint(program: Program, contents: Iterable[bytes]) -> str:
-    return _fingerprint(program, [sha256(content).hexdigest() for content in contents])
-
-
 async def _prepare_check(
     check_id: uuid.UUID,
     program: Program,
@@ -85,7 +76,7 @@ async def _prepare_check(
     issues: list[Issue] = []
     documents: list[NewDocument] = []
     detected_types: set[DocumentType] = set()
-    digests: list[str] = []
+    file_digests: list[tuple[str, str]] = []
     max_bytes = max_size_mb * 1024 * 1024
 
     for upload in uploads:
@@ -95,7 +86,7 @@ async def _prepare_check(
         stored = await files.save_stream(
             base_dir, check_id, document_id, ext, upload.chunks(), max_bytes=max_bytes
         )
-        digests.append(stored.digest)
+        file_digests.append((upload.filename, stored.digest))
         issues.extend(validate_file(upload.filename, stored.size_bytes, max_size_mb, detected))
         if detected is not None:
             detected_types.add(detected)
@@ -126,7 +117,7 @@ async def _prepare_check(
         documents=documents,
         issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],
     )
-    return new_check, _fingerprint(program, digests)
+    return new_check, fingerprint.from_digests(program, file_digests)
 
 
 async def run_check(
