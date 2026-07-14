@@ -1,9 +1,13 @@
+import base64
+import binascii
 import datetime
 import logging
 import uuid
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +16,7 @@ from core.exceptions import (
     CheckNotFoundError,
     IdempotencyKeyConflictError,
     IdempotencyKeyInProgressError,
+    InvalidCursorError,
 )
 from models import Check
 from repositories import check as check_repo
@@ -35,25 +40,38 @@ def _order_key(document: NewDocument) -> int:
     return _TYPE_ORDER[document.detected_type]
 
 
+_CHUNK_SIZE = 1024 * 1024
+
+
+class SupportsRead(Protocol):
+    async def read(self, size: int, /) -> bytes: ...
+
+
 @dataclass(frozen=True, slots=True)
 class UploadedFile:
     filename: str
     content_type: str | None
-    data: bytes
+    source: SupportsRead
+
+    async def chunks(self) -> AsyncIterator[bytes]:
+        while data := await self.source.read(_CHUNK_SIZE):
+            yield data
 
 
 @dataclass(frozen=True, slots=True)
 class CheckPage:
     items: list[CheckSummary]
-    total: int
-    limit: int
-    offset: int
+    next_cursor: str | None
+    has_more: bool
 
 
-def _compute_fingerprint(program: Program, uploads: list[UploadedFile]) -> str:
-    digests = sorted(sha256(upload.data).hexdigest() for upload in uploads)
-    payload = "|".join([program.value, *digests])
+def _fingerprint(program: Program, digests: Iterable[str]) -> str:
+    payload = "|".join([program.value, *sorted(digests)])
     return sha256(payload.encode()).hexdigest()
+
+
+def _compute_fingerprint(program: Program, contents: Iterable[bytes]) -> str:
+    return _fingerprint(program, [sha256(content).hexdigest() for content in contents])
 
 
 async def _prepare_check(
@@ -63,29 +81,33 @@ async def _prepare_check(
     *,
     base_dir: Path,
     max_size_mb: int,
-) -> NewCheck:
+) -> tuple[NewCheck, str]:
     issues: list[Issue] = []
     documents: list[NewDocument] = []
     detected_types: set[DocumentType] = set()
+    digests: list[str] = []
+    max_bytes = max_size_mb * 1024 * 1024
 
     for upload in uploads:
-        size_bytes = len(upload.data)
         detected = classify_document(upload.filename)
-        issues.extend(validate_file(upload.filename, size_bytes, max_size_mb, detected))
+        document_id = uuid.uuid4()
+        ext = Path(upload.filename).suffix
+        stored = await files.save_stream(
+            base_dir, check_id, document_id, ext, upload.chunks(), max_bytes=max_bytes
+        )
+        digests.append(stored.digest)
+        issues.extend(validate_file(upload.filename, stored.size_bytes, max_size_mb, detected))
         if detected is not None:
             detected_types.add(detected)
 
-        document_id = uuid.uuid4()
-        ext = Path(upload.filename).suffix
-        storage_path = await files.save(base_dir, check_id, document_id, ext, upload.data)
         documents.append(
             NewDocument(
                 id=document_id,
                 name=upload.filename,
                 detected_type=detected,
-                size_bytes=size_bytes,
+                size_bytes=stored.size_bytes,
                 content_type=upload.content_type,
-                storage_path=storage_path,
+                storage_path=stored.path,
             )
         )
 
@@ -95,7 +117,7 @@ async def _prepare_check(
     status = resolve_status(issues)
     reason = build_reason(issues, status)
 
-    return NewCheck(
+    new_check = NewCheck(
         id=check_id,
         program=program,
         status=status,
@@ -104,6 +126,7 @@ async def _prepare_check(
         documents=documents,
         issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],
     )
+    return new_check, _fingerprint(program, digests)
 
 
 async def run_check(
@@ -115,14 +138,28 @@ async def run_check(
     base_dir: Path,
     max_size_mb: int,
 ) -> Check:
+    check_id = uuid.uuid4()
+    try:
+        new_check, fingerprint = await _prepare_check(
+            check_id, program, uploads, base_dir=base_dir, max_size_mb=max_size_mb
+        )
+    except Exception:
+        logger.exception(
+            "Check %s failed during preparation; removing stored files under %s",
+            check_id,
+            base_dir / str(check_id),
+        )
+        await files.delete(base_dir, check_id)
+        raise
+
     if idempotency_key is not None:
-        fingerprint = _compute_fingerprint(program, uploads)
         stale_before = datetime.datetime.now(datetime.UTC) - _IN_PROGRESS_TTL
         claimed = await idempotency_repo.claim(
             session, idempotency_key, fingerprint, stale_before=stale_before
         )
         await session.commit()
         if claimed is None:
+            await files.delete(base_dir, check_id)
             existing = await idempotency_repo.get_by_key(session, idempotency_key)
             if existing is None:
                 raise IdempotencyKeyInProgressError
@@ -132,11 +169,7 @@ async def run_check(
                 return await get_check(session, existing.check_id)
             raise IdempotencyKeyInProgressError
 
-    check_id = uuid.uuid4()
     try:
-        new_check = await _prepare_check(
-            check_id, program, uploads, base_dir=base_dir, max_size_mb=max_size_mb
-        )
         async with session.begin():
             check = await check_repo.create(session, new_check)
             if idempotency_key is not None:
@@ -162,7 +195,24 @@ async def get_check(session: AsyncSession, check_id: uuid.UUID) -> Check:
     return check
 
 
-async def list_checks(session: AsyncSession, limit: int, offset: int) -> CheckPage:
-    items = await check_repo.list_all(session, limit, offset)
-    total = await check_repo.count(session)
-    return CheckPage(items=items, total=total, limit=limit, offset=offset)
+def _encode_cursor(item: CheckSummary) -> str:
+    raw = f"{item.checked_at.isoformat()}|{item.id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> tuple[datetime.datetime, uuid.UUID]:
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
+        checked_at, check_id = raw.rsplit("|", 1)
+        return datetime.datetime.fromisoformat(checked_at), uuid.UUID(check_id)
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise InvalidCursorError from exc
+
+
+async def list_checks(session: AsyncSession, limit: int, cursor: str | None) -> CheckPage:
+    decoded = _decode_cursor(cursor) if cursor else None
+    rows = await check_repo.list_page(session, limit=limit + 1, cursor=decoded)
+    has_more = len(rows) > limit
+    items = rows[:limit]
+    next_cursor = _encode_cursor(items[-1]) if has_more else None
+    return CheckPage(items=items, next_cursor=next_cursor, has_more=has_more)

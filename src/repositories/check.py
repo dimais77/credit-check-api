@@ -1,6 +1,7 @@
+import datetime
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -42,21 +43,28 @@ async def get_by_id(session: AsyncSession, check_id: uuid.UUID) -> Check | None:
     return result.scalar_one_or_none()
 
 
-async def list_all(session: AsyncSession, limit: int, offset: int) -> list[CheckSummary]:
-    result = await session.execute(
-        select(
-            Check.id,
-            Check.checked_at,
-            Check.program,
-            Check.status,
-            func.count(Document.id).label("documents_count"),
-        )
-        .outerjoin(Document, Document.check_id == Check.id)
-        .group_by(Check.id)
-        .order_by(Check.checked_at.desc())
-        .limit(limit)
-        .offset(offset)
+async def list_page(
+    session: AsyncSession,
+    *,
+    limit: int,
+    cursor: tuple[datetime.datetime, uuid.UUID] | None,
+) -> list[CheckSummary]:
+    documents_count = (
+        select(func.count(Document.id))
+        .where(Document.check_id == Check.id)
+        .correlate(Check)
+        .scalar_subquery()
+        .label("documents_count")
     )
+    stmt = (
+        select(Check.id, Check.checked_at, Check.program, Check.status, documents_count)
+        .order_by(Check.checked_at.desc(), Check.id.desc())
+        .limit(limit)
+    )
+    if cursor is not None:
+        stmt = stmt.where(tuple_(Check.checked_at, Check.id) < cursor)
+
+    result = await session.execute(stmt)
     return [
         CheckSummary(
             id=row.id,
@@ -67,8 +75,3 @@ async def list_all(session: AsyncSession, limit: int, offset: int) -> list[Check
         )
         for row in result.all()
     ]
-
-
-async def count(session: AsyncSession) -> int:
-    result = await session.execute(select(func.count()).select_from(Check))
-    return result.scalar_one()

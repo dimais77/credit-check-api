@@ -26,6 +26,11 @@ class IdempotencyKeyInProgressError(AppError):
     detail = "A request with this Idempotency-Key is already being processed"
 
 
+class InvalidCursorError(AppError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    detail = "Invalid pagination cursor"
+
+
 async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 

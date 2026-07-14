@@ -18,7 +18,7 @@ class NewDocument:
     detected_type: DocumentType | None
     size_bytes: int
     content_type: str | None
-    storage_path: str
+    storage_path: str | None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

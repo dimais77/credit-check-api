@@ -1,4 +1,5 @@
 import datetime
+import io
 import uuid
 from pathlib import Path
 
@@ -14,6 +15,14 @@ from services import check_service
 pytestmark = pytest.mark.anyio
 
 FileSpec = tuple[str, tuple[str, bytes, str]]
+
+
+class BytesReader:
+    def __init__(self, data: bytes) -> None:
+        self._buffer = io.BytesIO(data)
+
+    async def read(self, size: int) -> bytes:
+        return self._buffer.read(size)
 
 
 def _file(name: str) -> FileSpec:
@@ -37,6 +46,7 @@ async def test_create_approved(client: AsyncClient) -> None:
     assert response.status_code == 201
     body = response.json()
     assert uuid.UUID(body["check_id"])
+    assert body["program"] == "federal"
     assert body["status"] == "approved"
     assert body["reason"] is None
     assert body["issues"] == []
@@ -108,7 +118,9 @@ async def test_files_cleaned_up_on_db_failure(
     monkeypatch.setattr(check_repo, "create", failing_create)
 
     uploads = [
-        check_service.UploadedFile(filename=name, content_type="application/pdf", data=b"x")
+        check_service.UploadedFile(
+            filename=name, content_type="application/pdf", source=BytesReader(b"x")
+        )
         for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
     ]
 
@@ -164,14 +176,39 @@ async def test_list_checks(client: AsyncClient) -> None:
     await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
     await client.post("/api/checks", data={"program": "regional"}, files=FEDERAL_COMPLETE)
 
-    response = await client.get("/api/checks", params={"limit": 10, "offset": 0})
+    response = await client.get("/api/checks", params={"limit": 10})
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 2
-    assert body["limit"] == 10
-    assert body["offset"] == 0
+    assert body["has_more"] is False
+    assert body["next_cursor"] is None
     assert len(body["items"]) == 2
     assert body["items"][0]["documents_count"] == 4
+
+
+async def test_list_checks_paginates_with_cursor(client: AsyncClient) -> None:
+    for _ in range(3):
+        await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+
+    first = await client.get("/api/checks", params={"limit": 2})
+    page1 = first.json()
+    assert len(page1["items"]) == 2
+    assert page1["has_more"] is True
+    assert page1["next_cursor"]
+
+    second = await client.get("/api/checks", params={"limit": 2, "cursor": page1["next_cursor"]})
+    page2 = second.json()
+    assert len(page2["items"]) == 1
+    assert page2["has_more"] is False
+    assert page2["next_cursor"] is None
+
+    ids1 = {item["id"] for item in page1["items"]}
+    ids2 = {item["id"] for item in page2["items"]}
+    assert ids1.isdisjoint(ids2)
+
+
+async def test_list_checks_invalid_cursor_returns_422(client: AsyncClient) -> None:
+    response = await client.get("/api/checks", params={"cursor": "not-a-cursor"})
+    assert response.status_code == 422
 
 
 async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> None:
@@ -179,13 +216,7 @@ async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> Non
     assert response.status_code == 422
 
 
-def _federal_uploads() -> list[check_service.UploadedFile]:
-    return [
-        check_service.UploadedFile(
-            filename=name, content_type="application/pdf", data=b"document contents"
-        )
-        for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
-    ]
+_FEDERAL_CONTENTS = [b"document contents"] * 4
 
 
 async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> None:
@@ -202,7 +233,7 @@ async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> No
     assert first.json()["check_id"] == second.json()["check_id"]
 
     listed = await client.get("/api/checks")
-    assert listed.json()["total"] == 1
+    assert len(listed.json()["items"]) == 1
 
 
 async def test_create_conflicts_on_key_reused_with_different_payload(client: AsyncClient) -> None:
@@ -226,7 +257,7 @@ async def test_create_returns_409_while_key_still_in_progress(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
     session.add(IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None))
     await session.commit()
 
@@ -244,7 +275,7 @@ async def test_create_reclaims_stale_in_progress_key(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
     stale_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
     session.add(
         IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None, created_at=stale_at)

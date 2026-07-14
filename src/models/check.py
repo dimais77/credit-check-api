@@ -1,7 +1,7 @@
 import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Text, func
+from sqlalchemy import DateTime, Index, Text, func
 from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,3 +39,5 @@ class Check(UuidPkMixin, Base):
         order_by="Issue.position",
         collection_class=ordering_list("position"),
     )
+
+    __table_args__ = (Index("ix_checks_checked_at_id", "checked_at", "id"),)
