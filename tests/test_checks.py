@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.enums import Program
 from models import IdempotencyKey
 from repositories import check as check_repo
-from services import check_service
+from services import check_service, fingerprint
+from services.upload import UploadedFile
 
 pytestmark = pytest.mark.anyio
 
@@ -118,9 +119,7 @@ async def test_files_cleaned_up_on_db_failure(
     monkeypatch.setattr(check_repo, "create", failing_create)
 
     uploads = [
-        check_service.UploadedFile(
-            filename=name, content_type="application/pdf", source=BytesReader(b"x")
-        )
+        UploadedFile(filename=name, content_type="application/pdf", source=BytesReader(b"x"))
         for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
     ]
 
@@ -216,7 +215,12 @@ async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> Non
     assert response.status_code == 422
 
 
-_FEDERAL_CONTENTS = [b"document contents"] * 4
+_FEDERAL_FILES = [
+    ("Договор.pdf", b"document contents"),
+    ("Спецификация.pdf", b"document contents"),
+    ("Счёт.pdf", b"document contents"),
+    ("Акт.pdf", b"document contents"),
+]
 
 
 async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> None:
@@ -257,8 +261,8 @@ async def test_create_returns_409_while_key_still_in_progress(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
-    session.add(IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None))
+    fp = fingerprint.from_bytes(Program.FEDERAL, _FEDERAL_FILES)
+    session.add(IdempotencyKey(key=key, fingerprint=fp, check_id=None))
     await session.commit()
 
     response = await client.post(
@@ -275,11 +279,9 @@ async def test_create_reclaims_stale_in_progress_key(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
+    fp = fingerprint.from_bytes(Program.FEDERAL, _FEDERAL_FILES)
     stale_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
-    session.add(
-        IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None, created_at=stale_at)
-    )
+    session.add(IdempotencyKey(key=key, fingerprint=fp, check_id=None, created_at=stale_at))
     await session.commit()
 
     response = await client.post(
