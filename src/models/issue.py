@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Index, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.enums import IssueLevel
@@ -21,3 +21,5 @@ class Issue(UuidPkMixin, Base):
     position: Mapped[int]
 
     check: Mapped["Check"] = relationship(back_populates="issues")
+
+    __table_args__ = (Index("ix_issues_check_id", "check_id"),)

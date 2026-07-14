@@ -16,11 +16,6 @@ async def get_by_key(session: AsyncSession, key: str) -> IdempotencyKey | None:
 async def claim(
     session: AsyncSession, key: str, fingerprint: str, *, stale_before: datetime.datetime
 ) -> IdempotencyKey | None:
-    """Insert a fresh in-progress row, or reclaim a stale one for the same fingerprint.
-
-    Returns None if the key is held by a completed or still-fresh in-progress row
-    (caller must inspect that row to tell a replay from a genuine conflict).
-    """
     stmt = (
         insert(IdempotencyKey)
         .values(key=key, fingerprint=fingerprint, check_id=None)

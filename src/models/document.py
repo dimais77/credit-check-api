@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import ForeignKey, Index, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.enums import DocumentType
@@ -22,7 +22,9 @@ class Document(UuidPkMixin, Base):
     )
     size_bytes: Mapped[int]
     content_type: Mapped[str | None] = mapped_column(Text)
-    storage_path: Mapped[str] = mapped_column(Text)
+    storage_path: Mapped[str | None] = mapped_column(Text)
     position: Mapped[int]
 
     check: Mapped["Check"] = relationship(back_populates="documents")
+
+    __table_args__ = (Index("ix_documents_check_id", "check_id"),)

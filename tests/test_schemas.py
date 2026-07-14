@@ -6,7 +6,7 @@ import pytest
 
 from core.enums import CheckStatus, DocumentType, IssueLevel, Program
 from schemas.check import CheckListItem, CheckResult
-from schemas.pagination import Page
+from schemas.pagination import CursorPage
 
 CHECKED_AT = datetime.datetime(2025, 3, 15, 14, 32, 0, 654321, tzinfo=datetime.UTC)
 
@@ -14,6 +14,7 @@ CHECKED_AT = datetime.datetime(2025, 3, 15, 14, 32, 0, 654321, tzinfo=datetime.U
 def _orm_check(status: CheckStatus = CheckStatus.REJECTED) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
+        program=Program.FEDERAL,
         status=status,
         reason="Отсутствует обязательный документ: спецификация",
         checked_at=CHECKED_AT,
@@ -36,6 +37,7 @@ def test_check_result() -> None:
     payload = CheckResult.model_validate(orm).model_dump(mode="json")
 
     assert payload["check_id"] == str(orm.id)
+    assert payload["program"] == "federal"
     assert payload["extracted"] is None
     assert payload["checked_at"] == "2025-03-15T14:32:00Z"
     assert payload["documents"][0] == {
@@ -69,12 +71,13 @@ def test_page() -> None:
         documents_count=3,
     )
 
-    page = Page[CheckListItem](
-        items=[CheckListItem.model_validate(row)], total=42, limit=20, offset=0
+    page = CursorPage[CheckListItem](
+        items=[CheckListItem.model_validate(row)], next_cursor="abc", has_more=True
     )
     payload = page.model_dump(mode="json")
 
-    assert payload["total"] == 42
+    assert payload["next_cursor"] == "abc"
+    assert payload["has_more"] is True
     assert payload["items"][0] == {
         "id": str(row.id),
         "checked_at": "2025-03-15T14:32:00Z",

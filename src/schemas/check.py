@@ -49,6 +49,7 @@ class CheckResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     check_id: uuid.UUID = Field(validation_alias="id")
+    program: Program
     status: CheckStatus
     reason: str | None
     issues: list[IssueOut]
