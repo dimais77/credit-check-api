@@ -51,6 +51,7 @@ async def _prepare_check(
     program: Program,
     uploads: list[UploadedFile],
     *,
+    created_by: str | None,
     base_dir: Path,
     max_size_mb: int,
 ) -> tuple[NewCheck, str]:
@@ -97,6 +98,7 @@ async def _prepare_check(
         status=status,
         reason=reason,
         checked_at=datetime.datetime.now(datetime.UTC),
+        created_by=created_by,
         documents=documents,
         issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],
     )
@@ -135,6 +137,7 @@ async def run_check(
     idempotency_key: str | None,
     *,
     package_id: uuid.UUID | None,
+    created_by: str | None,
     base_dir: Path,
     max_size_mb: int,
 ) -> Check:
@@ -146,6 +149,7 @@ async def run_check(
             resolved_package_id,
             program,
             uploads,
+            created_by=created_by,
             base_dir=base_dir,
             max_size_mb=max_size_mb,
         )

@@ -29,6 +29,7 @@ class NewCheck:
     status: CheckStatus
     reason: str | None
     checked_at: datetime.datetime
+    created_by: str | None
     documents: list[NewDocument]
     issues: list[NewIssue]
 

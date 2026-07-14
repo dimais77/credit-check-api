@@ -19,6 +19,7 @@ def _orm_check(status: CheckStatus = CheckStatus.REJECTED) -> SimpleNamespace:
         status=status,
         reason="Отсутствует обязательный документ: спецификация",
         checked_at=CHECKED_AT,
+        created_by=None,
         documents=[
             SimpleNamespace(
                 name="договор_47.pdf", detected_type=DocumentType.CONTRACT, size_bytes=145408

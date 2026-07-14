@@ -57,6 +57,7 @@ class CheckResult(BaseModel):
     documents: list[DocumentOut]
     extracted: ExtractedData | None = None
     checked_at: UtcDateTime
+    created_by: str | None
 
     @computed_field
     def status_label(self) -> str:

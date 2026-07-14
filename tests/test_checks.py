@@ -144,6 +144,7 @@ async def test_files_cleaned_up_on_db_failure(
             uploads,
             None,
             package_id=None,
+            created_by=None,
             base_dir=tmp_path,
             max_size_mb=20,
         )
@@ -182,6 +183,23 @@ async def test_create_groups_versions_by_package_id(client: AsyncClient) -> None
 
     listed = await client.get("/api/checks")
     assert {item["package_id"] for item in listed.json()["items"]} == {package_id}
+
+
+async def test_create_records_submitting_user(client: AsyncClient) -> None:
+    response = await client.post(
+        "/api/checks",
+        data={"program": "federal"},
+        files=FEDERAL_COMPLETE,
+        headers={"Created-By": "treasury.ivanova"},
+    )
+    assert response.status_code == 201
+    assert response.json()["created_by"] == "treasury.ivanova"
+
+
+async def test_create_without_user_stores_null(client: AsyncClient) -> None:
+    response = await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+    assert response.status_code == 201
+    assert response.json()["created_by"] is None
 
 
 async def test_get_check(client: AsyncClient) -> None:

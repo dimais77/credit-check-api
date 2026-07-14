@@ -25,6 +25,7 @@ async def create_check(
     program: Annotated[Program, Form()],
     idempotency_key: Annotated[str | None, Header()] = None,
     package_id: Annotated[uuid.UUID | None, Header()] = None,
+    created_by: Annotated[str | None, Header()] = None,
     files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> CheckResult:
     if not files:
@@ -44,6 +45,7 @@ async def create_check(
         uploads,
         idempotency_key,
         package_id=package_id,
+        created_by=created_by,
         base_dir=settings.storage.dir,
         max_size_mb=settings.storage.max_file_size_mb,
     )
