@@ -1,5 +1,5 @@
 from core.enums import DocumentType, IssueLevel, Program
-from services.validation import check_completeness, validate_file
+from services.validation import check_completeness, check_duplicates, validate_file
 
 MAX_SIZE_MB = 20
 
@@ -51,3 +51,34 @@ def test_regional_complete() -> None:
     detected = {DocumentType.CONTRACT, DocumentType.INVOICE, DocumentType.ACT}
 
     assert check_completeness(detected, Program.REGIONAL) == []
+
+
+def test_no_duplicates_no_issues() -> None:
+    counts = {
+        DocumentType.CONTRACT: 1,
+        DocumentType.SPECIFICATION: 1,
+        DocumentType.INVOICE: 1,
+        DocumentType.ACT: 1,
+    }
+
+    assert check_duplicates(counts, Program.FEDERAL) == []
+
+
+def test_duplicate_required_type_warning() -> None:
+    counts = {DocumentType.CONTRACT: 2, DocumentType.INVOICE: 1, DocumentType.ACT: 1}
+
+    issues = check_duplicates(counts, Program.REGIONAL)
+
+    assert [issue.level for issue in issues] == [IssueLevel.WARNING]
+    assert issues[0].message == "Несколько документов типа «договор» в пакете"
+
+
+def test_duplicate_non_required_type_ignored() -> None:
+    counts = {
+        DocumentType.CONTRACT: 1,
+        DocumentType.INVOICE: 1,
+        DocumentType.ACT: 1,
+        DocumentType.SPECIFICATION: 2,
+    }
+
+    assert check_duplicates(counts, Program.REGIONAL) == []
