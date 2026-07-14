@@ -33,7 +33,7 @@ async def create_check(
         UploadedFile(
             filename=file.filename or "",
             content_type=file.content_type,
-            data=await file.read(),
+            source=file,
         )
         for file in files
     ]

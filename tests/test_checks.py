@@ -1,4 +1,5 @@
 import datetime
+import io
 import uuid
 from pathlib import Path
 
@@ -14,6 +15,14 @@ from services import check_service
 pytestmark = pytest.mark.anyio
 
 FileSpec = tuple[str, tuple[str, bytes, str]]
+
+
+class BytesReader:
+    def __init__(self, data: bytes) -> None:
+        self._buffer = io.BytesIO(data)
+
+    async def read(self, size: int) -> bytes:
+        return self._buffer.read(size)
 
 
 def _file(name: str) -> FileSpec:
@@ -108,7 +117,9 @@ async def test_files_cleaned_up_on_db_failure(
     monkeypatch.setattr(check_repo, "create", failing_create)
 
     uploads = [
-        check_service.UploadedFile(filename=name, content_type="application/pdf", data=b"x")
+        check_service.UploadedFile(
+            filename=name, content_type="application/pdf", source=BytesReader(b"x")
+        )
         for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
     ]
 
@@ -179,13 +190,7 @@ async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> Non
     assert response.status_code == 422
 
 
-def _federal_uploads() -> list[check_service.UploadedFile]:
-    return [
-        check_service.UploadedFile(
-            filename=name, content_type="application/pdf", data=b"document contents"
-        )
-        for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
-    ]
+_FEDERAL_CONTENTS = [b"document contents"] * 4
 
 
 async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> None:
@@ -226,7 +231,7 @@ async def test_create_returns_409_while_key_still_in_progress(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
     session.add(IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None))
     await session.commit()
 
@@ -244,7 +249,7 @@ async def test_create_reclaims_stale_in_progress_key(
     client: AsyncClient, session: AsyncSession
 ) -> None:
     key = str(uuid.uuid4())
-    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _federal_uploads())
+    fingerprint = check_service._compute_fingerprint(Program.FEDERAL, _FEDERAL_CONTENTS)
     stale_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
     session.add(
         IdempotencyKey(key=key, fingerprint=fingerprint, check_id=None, created_at=stale_at)

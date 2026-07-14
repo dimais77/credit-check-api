@@ -22,7 +22,7 @@ class Document(UuidPkMixin, Base):
     )
     size_bytes: Mapped[int]
     content_type: Mapped[str | None] = mapped_column(Text)
-    storage_path: Mapped[str] = mapped_column(Text)
+    storage_path: Mapped[str | None] = mapped_column(Text)
     position: Mapped[int]
 
     check: Mapped["Check"] = relationship(back_populates="documents")
