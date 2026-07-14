@@ -183,8 +183,15 @@ async def run_check(
         )
         await files.delete(base_dir, check_id)
         if idempotency_key is not None:
-            await idempotency_repo.release(session, idempotency_key)
-            await session.commit()
+            try:
+                await idempotency_repo.release(session, idempotency_key)
+                await session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to release idempotency key %s after check %s failed",
+                    idempotency_key,
+                    check_id,
+                )
         raise
 
 

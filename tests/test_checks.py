@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.enums import Program
 from models import IdempotencyKey
 from repositories import check as check_repo
+from repositories import idempotency as idempotency_repo
 from services import check_service, fingerprint
 from services.upload import UploadedFile
 
@@ -143,6 +144,38 @@ async def test_files_cleaned_up_on_db_failure(
             Program.FEDERAL,
             uploads,
             None,
+            package_id=None,
+            created_by=None,
+            base_dir=tmp_path,
+            max_size_mb=20,
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+async def test_original_error_survives_cleanup_failure(
+    session: AsyncSession, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def failing_create(_session: object, _dto: object) -> None:
+        raise RuntimeError("create failed")
+
+    async def failing_release(_session: object, _key: object) -> None:
+        raise RuntimeError("release failed")
+
+    monkeypatch.setattr(check_repo, "create", failing_create)
+    monkeypatch.setattr(idempotency_repo, "release", failing_release)
+
+    uploads = [
+        UploadedFile(filename=name, content_type="application/pdf", source=BytesReader(b"x"))
+        for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
+    ]
+
+    with pytest.raises(RuntimeError, match="create failed"):
+        await check_service.run_check(
+            session,
+            Program.FEDERAL,
+            uploads,
+            str(uuid.uuid4()),
             package_id=None,
             created_by=None,
             base_dir=tmp_path,
