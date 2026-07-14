@@ -68,6 +68,9 @@ src/
 │   ├── document_classifier.py   # тип документа по имени файла
 │   ├── validation.py            # формат/размер/имя + комплектность
 │   ├── status.py                # итоговый статус и причина
+│   ├── fingerprint.py           # отпечаток запроса для идемпотентности
+│   ├── cursor.py                # keyset-курсор пагинации (encode/decode)
+│   ├── upload.py                # адаптер загруженного файла в поток чанков
 │   └── check_service.py         # run_check: весь сценарий проверки
 ├── repositories/     # доступ к БД + DTO
 ├── models/           # ORM: Check, Document, Issue
@@ -76,7 +79,7 @@ src/
 └── migrations/       # Alembic
 ```
 
-`document_classifier`, `validation` и `status` - чистые функции без БД, ФС и настроек (конфиг - параметрами), под ними обычные unit-тесты. Весь ввод-вывод собран в `check_service.run_check` и репозиториях.
+`document_classifier`, `validation`, `status`, `fingerprint` и `cursor` - чистые функции без БД, ФС и настроек (конфиг - параметрами), под ними обычные unit-тесты. Весь ввод-вывод собран в `check_service.run_check` и репозиториях.
 
 Сценарий `POST /api/checks`: 
 по каждому файлу определяется тип по имени, байты стримятся в хранилище чанками с хешированием, чтение обрывается по лимиту размера файла; 
