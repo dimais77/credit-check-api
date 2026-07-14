@@ -1,12 +1,8 @@
-import base64
-import binascii
 import datetime
 import logging
 import uuid
-from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,16 +11,17 @@ from core.exceptions import (
     CheckNotFoundError,
     IdempotencyKeyConflictError,
     IdempotencyKeyInProgressError,
-    InvalidCursorError,
 )
 from models import Check
 from repositories import check as check_repo
 from repositories import idempotency as idempotency_repo
 from repositories.dto import CheckSummary, NewCheck, NewDocument, NewIssue
 from services import fingerprint
+from services.cursor import decode_cursor, encode_cursor
 from services.document_classifier import classify_document
 from services.issue import Issue
 from services.status import build_reason, resolve_status
+from services.upload import UploadedFile
 from services.validation import check_completeness, validate_file
 from storage import files
 
@@ -38,24 +35,6 @@ def _order_key(document: NewDocument) -> int:
     if document.detected_type is None:
         return len(_TYPE_ORDER)
     return _TYPE_ORDER[document.detected_type]
-
-
-_CHUNK_SIZE = 1024 * 1024
-
-
-class SupportsRead(Protocol):
-    async def read(self, size: int, /) -> bytes: ...
-
-
-@dataclass(frozen=True, slots=True)
-class UploadedFile:
-    filename: str
-    content_type: str | None
-    source: SupportsRead
-
-    async def chunks(self) -> AsyncIterator[bytes]:
-        while data := await self.source.read(_CHUNK_SIZE):
-            yield data
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +99,31 @@ async def _prepare_check(
     return new_check, fingerprint.from_digests(program, file_digests)
 
 
+async def _claim_or_replay(
+    session: AsyncSession,
+    idempotency_key: str,
+    fp: str,
+    *,
+    base_dir: Path,
+    check_id: uuid.UUID,
+) -> Check | None:
+    stale_before = datetime.datetime.now(datetime.UTC) - _IN_PROGRESS_TTL
+    claimed = await idempotency_repo.claim(session, idempotency_key, fp, stale_before=stale_before)
+    await session.commit()
+    if claimed is not None:
+        return None
+
+    await files.delete(base_dir, check_id)
+    existing = await idempotency_repo.get_by_key(session, idempotency_key)
+    if existing is None:
+        raise IdempotencyKeyInProgressError
+    if existing.fingerprint != fp:
+        raise IdempotencyKeyConflictError
+    if existing.check_id is not None:
+        return await get_check(session, existing.check_id)
+    raise IdempotencyKeyInProgressError
+
+
 async def run_check(
     session: AsyncSession,
     program: Program,
@@ -131,7 +135,7 @@ async def run_check(
 ) -> Check:
     check_id = uuid.uuid4()
     try:
-        new_check, fingerprint = await _prepare_check(
+        new_check, fp = await _prepare_check(
             check_id, program, uploads, base_dir=base_dir, max_size_mb=max_size_mb
         )
     except Exception:
@@ -144,21 +148,11 @@ async def run_check(
         raise
 
     if idempotency_key is not None:
-        stale_before = datetime.datetime.now(datetime.UTC) - _IN_PROGRESS_TTL
-        claimed = await idempotency_repo.claim(
-            session, idempotency_key, fingerprint, stale_before=stale_before
+        replay = await _claim_or_replay(
+            session, idempotency_key, fp, base_dir=base_dir, check_id=check_id
         )
-        await session.commit()
-        if claimed is None:
-            await files.delete(base_dir, check_id)
-            existing = await idempotency_repo.get_by_key(session, idempotency_key)
-            if existing is None:
-                raise IdempotencyKeyInProgressError
-            if existing.fingerprint != fingerprint:
-                raise IdempotencyKeyConflictError
-            if existing.check_id is not None:
-                return await get_check(session, existing.check_id)
-            raise IdempotencyKeyInProgressError
+        if replay is not None:
+            return replay
 
     try:
         async with session.begin():
@@ -186,24 +180,10 @@ async def get_check(session: AsyncSession, check_id: uuid.UUID) -> Check:
     return check
 
 
-def _encode_cursor(item: CheckSummary) -> str:
-    raw = f"{item.checked_at.isoformat()}|{item.id}"
-    return base64.urlsafe_b64encode(raw.encode()).decode()
-
-
-def _decode_cursor(cursor: str) -> tuple[datetime.datetime, uuid.UUID]:
-    try:
-        raw = base64.urlsafe_b64decode(cursor.encode()).decode()
-        checked_at, check_id = raw.rsplit("|", 1)
-        return datetime.datetime.fromisoformat(checked_at), uuid.UUID(check_id)
-    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
-        raise InvalidCursorError from exc
-
-
 async def list_checks(session: AsyncSession, limit: int, cursor: str | None) -> CheckPage:
-    decoded = _decode_cursor(cursor) if cursor else None
+    decoded = decode_cursor(cursor) if cursor else None
     rows = await check_repo.list_page(session, limit=limit + 1, cursor=decoded)
     has_more = len(rows) > limit
     items = rows[:limit]
-    next_cursor = _encode_cursor(items[-1]) if has_more else None
+    next_cursor = encode_cursor(items[-1].checked_at, items[-1].id) if has_more else None
     return CheckPage(items=items, next_cursor=next_cursor, has_more=has_more)

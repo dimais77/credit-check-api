@@ -11,6 +11,7 @@ from core.enums import Program
 from models import IdempotencyKey
 from repositories import check as check_repo
 from services import check_service, fingerprint
+from services.upload import UploadedFile
 
 pytestmark = pytest.mark.anyio
 
@@ -118,9 +119,7 @@ async def test_files_cleaned_up_on_db_failure(
     monkeypatch.setattr(check_repo, "create", failing_create)
 
     uploads = [
-        check_service.UploadedFile(
-            filename=name, content_type="application/pdf", source=BytesReader(b"x")
-        )
+        UploadedFile(filename=name, content_type="application/pdf", source=BytesReader(b"x"))
         for name in ("Договор.pdf", "Спецификация.pdf", "Счёт.pdf", "Акт.pdf")
     ]
 
