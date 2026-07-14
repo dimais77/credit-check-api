@@ -47,6 +47,7 @@ class CheckPage:
 
 async def _prepare_check(
     check_id: uuid.UUID,
+    package_id: uuid.UUID,
     program: Program,
     uploads: list[UploadedFile],
     *,
@@ -91,6 +92,7 @@ async def _prepare_check(
 
     new_check = NewCheck(
         id=check_id,
+        package_id=package_id,
         program=program,
         status=status,
         reason=reason,
@@ -132,13 +134,20 @@ async def run_check(
     uploads: list[UploadedFile],
     idempotency_key: str | None,
     *,
+    package_id: uuid.UUID | None,
     base_dir: Path,
     max_size_mb: int,
 ) -> Check:
     check_id = uuid.uuid4()
+    resolved_package_id = package_id or uuid.uuid4()
     try:
         new_check, fp = await _prepare_check(
-            check_id, program, uploads, base_dir=base_dir, max_size_mb=max_size_mb
+            check_id,
+            resolved_package_id,
+            program,
+            uploads,
+            base_dir=base_dir,
+            max_size_mb=max_size_mb,
         )
     except Exception:
         logger.exception(

@@ -139,10 +139,49 @@ async def test_files_cleaned_up_on_db_failure(
 
     with pytest.raises(RuntimeError):
         await check_service.run_check(
-            session, Program.FEDERAL, uploads, None, base_dir=tmp_path, max_size_mb=20
+            session,
+            Program.FEDERAL,
+            uploads,
+            None,
+            package_id=None,
+            base_dir=tmp_path,
+            max_size_mb=20,
         )
 
     assert list(tmp_path.iterdir()) == []
+
+
+async def test_create_generates_package_id_when_absent(client: AsyncClient) -> None:
+    response = await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+    assert response.status_code == 201
+    assert uuid.UUID(response.json()["package_id"])
+
+
+async def test_create_groups_versions_by_package_id(client: AsyncClient) -> None:
+    package_id = str(uuid.uuid4())
+    headers = {"Package-Id": package_id}
+
+    first = await client.post(
+        "/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE, headers=headers
+    )
+    second = await client.post(
+        "/api/checks",
+        data={"program": "federal"},
+        files=[
+            _file("Договор.pdf"),
+            _file("Спецификация.pdf"),
+            _file("Счёт.pdf"),
+            _file("Акт.pdf"),
+        ],
+        headers=headers,
+    )
+
+    assert first.json()["package_id"] == package_id
+    assert second.json()["package_id"] == package_id
+    assert first.json()["check_id"] != second.json()["check_id"]
+
+    listed = await client.get("/api/checks")
+    assert {item["package_id"] for item in listed.json()["items"]} == {package_id}
 
 
 async def test_get_check(client: AsyncClient) -> None:

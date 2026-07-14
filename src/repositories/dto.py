@@ -24,6 +24,7 @@ class NewDocument:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class NewCheck:
     id: uuid.UUID
+    package_id: uuid.UUID
     program: Program
     status: CheckStatus
     reason: str | None
@@ -35,6 +36,7 @@ class NewCheck:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class CheckSummary:
     id: uuid.UUID
+    package_id: uuid.UUID
     checked_at: datetime.datetime
     program: Program
     status: CheckStatus

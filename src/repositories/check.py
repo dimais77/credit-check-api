@@ -12,6 +12,7 @@ from repositories.dto import CheckSummary, NewCheck
 async def create(session: AsyncSession, dto: NewCheck) -> Check:
     check = Check(
         id=dto.id,
+        package_id=dto.package_id,
         program=dto.program,
         status=dto.status,
         reason=dto.reason,
@@ -57,7 +58,14 @@ async def list_page(
         .label("documents_count")
     )
     stmt = (
-        select(Check.id, Check.checked_at, Check.program, Check.status, documents_count)
+        select(
+            Check.id,
+            Check.package_id,
+            Check.checked_at,
+            Check.program,
+            Check.status,
+            documents_count,
+        )
         .order_by(Check.checked_at.desc(), Check.id.desc())
         .limit(limit)
     )
@@ -68,6 +76,7 @@ async def list_page(
     return [
         CheckSummary(
             id=row.id,
+            package_id=row.package_id,
             checked_at=row.checked_at,
             program=row.program,
             status=row.status,

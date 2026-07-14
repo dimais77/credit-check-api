@@ -49,6 +49,7 @@ class CheckResult(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     check_id: uuid.UUID = Field(validation_alias="id")
+    package_id: uuid.UUID
     program: Program
     status: CheckStatus
     reason: str | None
@@ -66,6 +67,7 @@ class CheckListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
+    package_id: uuid.UUID
     checked_at: UtcDateTime
     program: Program
     status: CheckStatus

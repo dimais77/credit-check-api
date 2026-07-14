@@ -14,6 +14,7 @@ CHECKED_AT = datetime.datetime(2025, 3, 15, 14, 32, 0, 654321, tzinfo=datetime.U
 def _orm_check(status: CheckStatus = CheckStatus.REJECTED) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
+        package_id=uuid.uuid4(),
         program=Program.FEDERAL,
         status=status,
         reason="Отсутствует обязательный документ: спецификация",
@@ -37,6 +38,7 @@ def test_check_result() -> None:
     payload = CheckResult.model_validate(orm).model_dump(mode="json")
 
     assert payload["check_id"] == str(orm.id)
+    assert payload["package_id"] == str(orm.package_id)
     assert payload["program"] == "federal"
     assert payload["extracted"] is None
     assert payload["checked_at"] == "2025-03-15T14:32:00Z"
@@ -65,6 +67,7 @@ def test_status_label(status: CheckStatus, label: str) -> None:
 def test_page() -> None:
     row = SimpleNamespace(
         id=uuid.uuid4(),
+        package_id=uuid.uuid4(),
         checked_at=CHECKED_AT,
         program=Program.FEDERAL,
         status=CheckStatus.REJECTED,
@@ -80,6 +83,7 @@ def test_page() -> None:
     assert payload["has_more"] is True
     assert payload["items"][0] == {
         "id": str(row.id),
+        "package_id": str(row.package_id),
         "checked_at": "2025-03-15T14:32:00Z",
         "program": "federal",
         "status": "rejected",

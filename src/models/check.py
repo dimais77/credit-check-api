@@ -1,4 +1,5 @@
 import datetime
+import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Index, Text, func
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 class Check(UuidPkMixin, Base):
     __tablename__ = "checks"
 
+    package_id: Mapped[uuid.UUID] = mapped_column()
     program: Mapped[Program] = mapped_column(pg_enum(Program, "program"))
     status: Mapped[CheckStatus] = mapped_column(pg_enum(CheckStatus, "check_status"))
     reason: Mapped[str | None] = mapped_column(Text)
@@ -40,4 +42,7 @@ class Check(UuidPkMixin, Base):
         collection_class=ordering_list("position"),
     )
 
-    __table_args__ = (Index("ix_checks_checked_at_id", "checked_at", "id"),)
+    __table_args__ = (
+        Index("ix_checks_checked_at_id", "checked_at", "id"),
+        Index("ix_checks_package_id", "package_id"),
+    )
