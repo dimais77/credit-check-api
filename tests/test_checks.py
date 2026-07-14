@@ -304,8 +304,8 @@ async def test_list_checks_paginates_with_cursor(client: AsyncClient) -> None:
     assert page2["has_more"] is False
     assert page2["next_cursor"] is None
 
-    ids1 = {item["id"] for item in page1["items"]}
-    ids2 = {item["id"] for item in page2["items"]}
+    ids1 = {item["check_id"] for item in page1["items"]}
+    ids2 = {item["check_id"] for item in page2["items"]}
     assert ids1.isdisjoint(ids2)
 
 

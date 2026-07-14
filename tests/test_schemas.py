@@ -83,7 +83,7 @@ def test_page() -> None:
     assert payload["next_cursor"] == "abc"
     assert payload["has_more"] is True
     assert payload["items"][0] == {
-        "id": str(row.id),
+        "check_id": str(row.id),
         "package_id": str(row.package_id),
         "checked_at": "2025-03-15T14:32:00Z",
         "program": "federal",
