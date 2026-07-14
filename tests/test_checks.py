@@ -46,6 +46,7 @@ async def test_create_approved(client: AsyncClient) -> None:
     assert response.status_code == 201
     body = response.json()
     assert uuid.UUID(body["check_id"])
+    assert body["program"] == "federal"
     assert body["status"] == "approved"
     assert body["reason"] is None
     assert body["issues"] == []
