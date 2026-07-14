@@ -97,7 +97,6 @@ async def _prepare_check(
         program=program,
         status=status,
         reason=reason,
-        checked_at=datetime.datetime.now(datetime.UTC),
         created_by=created_by,
         documents=documents,
         issues=[NewIssue(level=issue.level, message=issue.message) for issue in issues],

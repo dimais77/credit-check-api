@@ -16,7 +16,6 @@ async def create(session: AsyncSession, dto: NewCheck) -> Check:
         program=dto.program,
         status=dto.status,
         reason=dto.reason,
-        checked_at=dto.checked_at,
         created_by=dto.created_by,
         documents=[
             Document(
