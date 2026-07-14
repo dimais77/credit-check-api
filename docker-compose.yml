@@ -1,5 +1,9 @@
 name: credit-check-api
 
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+
 x-db-url: &db-url
   APP_CONFIG__DB__URL: postgresql+asyncpg://${POSTGRES_USER:-credit}:${POSTGRES_PASSWORD:-credit}@db:5432/${POSTGRES_DB:-credit}
 
@@ -22,6 +26,7 @@ services:
     restart: unless-stopped
 
   migrate:
+    build: *app-build
     image: credit-check-api:0.1.0
     command: ["alembic", "upgrade", "head"]
     environment:
@@ -31,9 +36,7 @@ services:
         condition: service_healthy
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: *app-build
     image: credit-check-api:0.1.0
     environment:
       <<: *db-url
