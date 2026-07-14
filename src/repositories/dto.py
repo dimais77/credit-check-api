@@ -24,10 +24,11 @@ class NewDocument:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class NewCheck:
     id: uuid.UUID
+    package_id: uuid.UUID
     program: Program
     status: CheckStatus
     reason: str | None
-    checked_at: datetime.datetime
+    created_by: str | None
     documents: list[NewDocument]
     issues: list[NewIssue]
 
@@ -35,6 +36,7 @@ class NewCheck:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class CheckSummary:
     id: uuid.UUID
+    package_id: uuid.UUID
     checked_at: datetime.datetime
     program: Program
     status: CheckStatus
