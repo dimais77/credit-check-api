@@ -175,14 +175,39 @@ async def test_list_checks(client: AsyncClient) -> None:
     await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
     await client.post("/api/checks", data={"program": "regional"}, files=FEDERAL_COMPLETE)
 
-    response = await client.get("/api/checks", params={"limit": 10, "offset": 0})
+    response = await client.get("/api/checks", params={"limit": 10})
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == 2
-    assert body["limit"] == 10
-    assert body["offset"] == 0
+    assert body["has_more"] is False
+    assert body["next_cursor"] is None
     assert len(body["items"]) == 2
     assert body["items"][0]["documents_count"] == 4
+
+
+async def test_list_checks_paginates_with_cursor(client: AsyncClient) -> None:
+    for _ in range(3):
+        await client.post("/api/checks", data={"program": "federal"}, files=FEDERAL_COMPLETE)
+
+    first = await client.get("/api/checks", params={"limit": 2})
+    page1 = first.json()
+    assert len(page1["items"]) == 2
+    assert page1["has_more"] is True
+    assert page1["next_cursor"]
+
+    second = await client.get("/api/checks", params={"limit": 2, "cursor": page1["next_cursor"]})
+    page2 = second.json()
+    assert len(page2["items"]) == 1
+    assert page2["has_more"] is False
+    assert page2["next_cursor"] is None
+
+    ids1 = {item["id"] for item in page1["items"]}
+    ids2 = {item["id"] for item in page2["items"]}
+    assert ids1.isdisjoint(ids2)
+
+
+async def test_list_checks_invalid_cursor_returns_422(client: AsyncClient) -> None:
+    response = await client.get("/api/checks", params={"cursor": "not-a-cursor"})
+    assert response.status_code == 422
 
 
 async def test_list_checks_invalid_limit_returns_422(client: AsyncClient) -> None:
@@ -207,7 +232,7 @@ async def test_create_replays_same_check_for_same_key(client: AsyncClient) -> No
     assert first.json()["check_id"] == second.json()["check_id"]
 
     listed = await client.get("/api/checks")
-    assert listed.json()["total"] == 1
+    assert len(listed.json()["items"]) == 1
 
 
 async def test_create_conflicts_on_key_reused_with_different_payload(client: AsyncClient) -> None:

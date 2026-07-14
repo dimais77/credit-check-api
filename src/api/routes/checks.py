@@ -8,7 +8,7 @@ from core.config import Settings, get_settings
 from core.database import get_session
 from core.enums import Program
 from schemas.check import CheckListItem, CheckResult
-from schemas.pagination import Page
+from schemas.pagination import CursorPage
 from services import check_service
 from services.check_service import UploadedFile
 
@@ -48,15 +48,17 @@ async def create_check(
     return CheckResult.model_validate(check)
 
 
-@router.get("", response_model=Page[CheckListItem])
+@router.get("", response_model=CursorPage[CheckListItem])
 async def list_checks(
     session: Annotated[AsyncSession, Depends(get_session)],
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> Page[CheckListItem]:
-    page = await check_service.list_checks(session, limit, offset)
+    cursor: Annotated[str | None, Query()] = None,
+) -> CursorPage[CheckListItem]:
+    page = await check_service.list_checks(session, limit, cursor)
     items = [CheckListItem.model_validate(item) for item in page.items]
-    return Page[CheckListItem](items=items, total=page.total, limit=page.limit, offset=page.offset)
+    return CursorPage[CheckListItem](
+        items=items, next_cursor=page.next_cursor, has_more=page.has_more
+    )
 
 
 @router.get(
